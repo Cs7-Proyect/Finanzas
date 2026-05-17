@@ -218,7 +218,8 @@ function procesarRegistro(rows) {
     const mes      = row[2] || ''; // columna C = mes calculado (ej: "may-26")
     const cat      = row[3] || '';
     const sub      = row[4] || '';
-    const monto    = parseFloat((row[6] || '0').toString().replace(',', '.')) || 0;
+    const montoRaw = (row[6] || '0').toString().replace(/\$/g,'').replace(/\./g,'').replace(/,/g,'.').trim();
+    const monto = parseFloat(montoRaw) || 0;
     const tipo     = row[8] || '';
     
     if (!mes || !cat) return;
