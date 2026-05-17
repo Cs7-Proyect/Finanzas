@@ -4,8 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#0F0F14">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Finanzas · Carlos Silva</title>
+<style>
+  html { height: -webkit-fill-available; }
+  body { min-height: -webkit-fill-available !important; padding-top: env(safe-area-inset-top) !important; }
+</style>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0F0F14;color:#F0F0F8;padding:16px;max-width:740px;margin:0 auto;}
@@ -102,7 +108,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <p class="db-title">Finanzas personales</p>
     <p class="db-sub">Carlos Silva Valenzuela</p>
   </div>
-  <span class="badge" id="connBadge">⏳ Conectando...</span>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span class="badge" id="connBadge">⏳ Conectando...</span>
+    <button onclick="forzarActualizacion()" style="background:none;border:none;color:#6060A0;font-size:16px;cursor:pointer;padding:4px;" title="Forzar actualización">↻</button>
+  </div>
 </div>
 
 <div class="last-update" id="lastUpdate"></div>
@@ -543,8 +552,22 @@ async function init() {
     badge.textContent = '⏳ Cargando datos...';
     badge.className = 'badge loading';
     
-    // Leer datos
-    const rows = await leerSheets();
+    // Verificar caché (5 minutos)
+    const cacheKey = 'finanzas_cache';
+    const cacheTime = 'finanzas_cache_time';
+    const ahora = Date.now();
+    const cached = localStorage.getItem(cacheKey);
+    const cachedTime = parseInt(localStorage.getItem(cacheTime) || '0');
+    
+    let rows;
+    if (cached && (ahora - cachedTime) < 5 * 60 * 1000) {
+      rows = JSON.parse(cached);
+      badge.textContent = '✓ Desde caché';
+    } else {
+      rows = await leerSheets();
+      localStorage.setItem(cacheKey, JSON.stringify(rows));
+      localStorage.setItem(cacheTime, ahora.toString());
+    }
     datosMeses = procesarRegistro(rows);
     
     // Ordenar meses cronológicamente
@@ -571,9 +594,8 @@ async function init() {
     renderMetrics(datosMeses[mesActual]);
     renderEvolucion(mesesOrdenados);
     
-    // Cargar TC y ahorro en paralelo
-    cargarTC();
-    cargarAhorro();
+    // Cargar TC y ahorro en paralelo (más rápido)
+    Promise.all([cargarTC(), cargarAhorro()]);
     
     // Badge de éxito
     const ahora = new Date().toLocaleTimeString('es-CL', {hour:'2-digit',minute:'2-digit'});
@@ -679,6 +701,13 @@ async function cargarAhorro() {
     const el = document.getElementById('fondoContent');
     if (el) el.innerHTML = '<p style="font-size:11px;color:#8E8E93;">Error cargando fondo</p>';
   }
+}
+
+// Forzar actualización (borra caché)
+function forzarActualizacion() {
+  localStorage.removeItem('finanzas_cache');
+  localStorage.removeItem('finanzas_cache_time');
+  init();
 }
 
 // Iniciar
