@@ -25,7 +25,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px;}
 .mc{background:#1A1A24;border:1px solid #2A2A38;border-radius:14px;padding:14px 12px;}
 .mc-lbl{font-size:11px;color:#8080A0;font-weight:600;letter-spacing:0.04em;margin-bottom:6px;text-transform:uppercase;}
-.mc-val{font-size:clamp(13px,2.5vw,20px);font-weight:700;line-height:1.2;word-break:break-word;color:#F0F0F8;}
+.mc-val{font-size:clamp(11px,2.2vw,17px);font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#F0F0F8;}
 .mc-sub{font-size:10px;color:#606080;margin-top:4px;font-weight:500;}
 .pos{color:#4ADE80;}.neg{color:#FF6B6B;}
 
@@ -252,6 +252,12 @@ function procesarRegistro(rows) {
 // FORMATO
 // ============================================================
 function fmt(v) { return '$' + Math.round(Math.abs(v)).toLocaleString('es-CL'); }
+function fmtCorto(v) {
+  const n = Math.abs(v);
+  if (n >= 1000000) return '$' + (n/1000000).toFixed(2).replace('.',',') + 'M';
+  if (n >= 1000) return '$' + Math.round(n/1000) + 'k';
+  return '$' + Math.round(n).toLocaleString('es-CL');
+}
 function fmtK(v) { return v >= 1000000 ? '$' + (v/1000000).toFixed(1) + 'M' : '$' + Math.round(v/1000) + 'k'; }
 
 function labelMes(mesKey) {
@@ -284,7 +290,7 @@ function renderMetrics(mesData) {
   document.getElementById('mainContent').innerHTML = `
     <div class="metrics" id="metrics">
       <div class="mc"><p class="mc-lbl">Ingreso</p><p class="mc-val">${mesData.ingresos ? fmt(mesData.ingresos) : '—'}</p><p class="mc-sub">del mes</p></div>
-      <div class="mc"><p class="mc-lbl">Gasto total</p><p class="mc-val neg">${fmt(totalG)}</p><p class="mc-sub">${mesData.ingresos ? Math.round(totalG/mesData.ingresos*100)+'% ing.' : 'en curso'}</p></div>
+      <div class="mc"><p class="mc-lbl">Gasto total</p><p class="mc-val neg">${fmtCorto(totalG)}</p><p class="mc-sub">${mesData.ingresos ? Math.round(totalG/mesData.ingresos*100)+'% ing.' : 'en curso'}</p></div>
       <div class="mc"><p class="mc-lbl">Ahorro</p><p class="mc-val pos">${mesData.ahorro ? fmt(mesData.ahorro) : '—'}</p><p class="mc-sub">${mesData.ingresos && mesData.ahorro ? Math.round(mesData.ahorro/mesData.ingresos*100)+'% ing.' : 'sin reg.'}</p></div>
       <div class="mc"><p class="mc-lbl">Costo TC</p><p class="mc-val neg">${mesData.costoFin ? fmt(mesData.costoFin) : '—'}</p><p class="mc-sub">financiero</p></div>
     </div>
@@ -388,7 +394,7 @@ function renderDonut(mesData) {
       cutout: '58%',
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => ' ' + ctx.label + ': ' + fmt(ctx.raw) + ' (' + Math.round(ctx.raw/total*100) + '%)' } }
+        tooltip: { enabled: false }
       },
       onClick: (evt, els) => { if (els.length) toggleSlice(els[0].index, cats, total); }
     }
@@ -606,9 +612,13 @@ async function cargarTC() {
     const mesKey = mesActual;
     const mesLabel = labelMes(mesKey).replace(' 20', '-').toLowerCase();
     
-    // Buscar índice aproximado en los meses TC
-    let idxMes = mesesTC.findIndex(m => m.toLowerCase().replace('-', '-') === mesKey.replace('-', '-'));
-    if (idxMes < 0) idxMes = 5; // default mayo
+    // Mapeo correcto de mes a índice TC
+    const tcMesMap = {
+      'dic-25':0,'ene-26':1,'feb-26':2,'mar-26':3,'abr-26':4,
+      'may-26':5,'jun-26':6,'jul-26':7,'ago-26':8,'sep-26':9,
+      'oct-26':10,'nov-26':11,'dic-26':12,'ene-27':13
+    };
+    let idxMes = tcMesMap[mesKey] !== undefined ? tcMesMap[mesKey] : 5;
     
     // Buscar fila TOTAL A PAGAR
     let fila_pagar = [];
@@ -659,7 +669,7 @@ async function cargarAhorro() {
       <div class="prg-bar"><div class="prg-fill" style="width:${pct}%;background:#1D9E75;"></div></div>
       <div style="font-size:10px;color:#1D9E75;margin-bottom:8px;">${pct >= 100 ? '✓ Completo · excedente ' + fmt(excedente) : pct + '% completado'}</div>
       <div class="fondo-row"><span>Último aporte</span><span class="fondo-val" style="color:#1D9E75;">+${fmt(ultimoAporte)}</span></div>
-      <div class="fondo-row"><span>Préstamo a papá</span><span class="fondo-val" style="color:#A32D2D;">-${fmt(prestamo)}</span></div>
+      <div class="fondo-row"><span>Préstamo a papá</span><span class="fondo-val" style="color:#FF6B6B;">-${fmt(prestamo)}</span></div>
     `;
     
     const el = document.getElementById('fondoContent');
