@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e1a">
+<title>CS7 · Inversiones</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722%27 fill=%27%230a0e1a%27/%3E%3Ctext x=%2750%27 y=%2766%27 font-size=%2748%27 text-anchor=%27middle%27 fill=%27%2338e0d0%27 font-family=%27sans-serif%27 font-weight=%27bold%27%3E7%3C/text%3E%3C/svg%3E">
+<style>
+  * { margin: 0; padding: 0; }
+  html, body { background: #0a0e1a; min-height: 100vh; }
+  body { padding: 0; }
+  /* el contenedor del dashboard ocupa todo el ancho */
+  #cs7-app { border-radius: 0 !important; box-shadow: none !important; min-height: 100vh; }
+  @media (min-width: 1100px) {
+    body { padding: 20px; background: #06080f; }
+    #cs7-app { border-radius: 16px !important; max-width: 1320px; margin: 0 auto; box-shadow: 0 24px 80px rgba(0,0,0,.5) !important; min-height: auto; }
+  }
+</style>
+</head>
+<body>
+<!--
+  DASHBOARD CS7 — PROTOTIPO VISUAL (Inversiones)
+  Datos de ejemplo basados en el estado real del portafolio.
+  Cuando se conecte a la Sheet vía API, se reemplazan los objetos
+  PORTFOLIO y WATCHLIST por la lectura real. Marcado con // === DATA ===
+-->
+<div id="cs7-app">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+
+    #cs7-app {
+      --bg: #0a0e1a;
+      --panel: #111726;
+      --panel-2: #161d30;
+      --border: #1f2940;
+      --txt: #e6ebf5;
+      --txt-dim: #8794ad;
+      --cyan: #2fd4c4;
+      --gold: #f5c451;
+      --green: #2ecc71;
+      --amber: #f5a623;
+      --red: #e74c3c;
+      --blue: #4a8cff;
+      --magenta: #d957c9;
+      --row-border: rgba(31,41,64,.5);
+      --nav-grad-a: #0d1322;
+      --nav-grad-b: #0a0e1a;
+      --shadow: 0 24px 80px rgba(0,0,0,.5);
+      font-family: 'Sora', sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+      padding: 0;
+      margin: 0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: background .3s ease, color .3s ease;
+    }
+    #cs7-app * { box-sizing: border-box; }
+
+    #cs7-app.light {
+      --bg: #f4f6fb;
+      --panel: #ffffff;
+      --panel-2: #eef1f8;
+      --border: #dde3ef;
+      --txt: #1a2238;
+      --txt-dim: #6b7690;
+      --cyan: #0e9e8f;
+      --gold: #c2891a;
+      --row-border: rgba(221,227,239,.7);
+      --nav-grad-a: #ffffff;
+      --nav-grad-b: #f4f6fb;
+      --shadow: 0 24px 80px rgba(100,110,140,.18);
+    }
+
+    /* ===== NAV ===== */
+    .cs7-nav {
+      display: flex; align-items: center; gap: 4px;
+      padding: 14px 22px;
+      background: linear-gradient(180deg, var(--nav-grad-a), var(--nav-grad-b));
+      border-bottom: 1px solid var(--border);
+    }
+    .cs7-brand {
+      font-weight: 800; font-size: 16px; letter-spacing: .5px;
+      margin-right: 18px;
+    }
+    .cs7-brand span { color: var(--cyan); }
+    .cs7-tab {
+      padding: 8px 18px; border-radius: 9px; font-size: 13.5px; font-weight: 600;
+      color: var(--txt-dim); cursor: pointer; border: 1px solid transparent;
+      transition: all .18s ease;
+    }
+    .cs7-tab:hover { color: var(--txt); background: var(--panel); }
+    .cs7-tab.active {
+      color: var(--bg); background: var(--cyan); border-color: var(--cyan);
+    }
+    .cs7-nav-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+    .cs7-clock { font-family: 'Space Mono'; font-size: 12px; color: var(--txt-dim); }
+    .cs7-theme-btn {
+      width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border);
+      background: var(--panel); color: var(--txt); cursor: pointer; font-size: 15px;
+      display: flex; align-items: center; justify-content: center; transition: all .18s ease;
+    }
+    .cs7-theme-btn:hover { background: var(--panel-2); }
+
+    /* ===== LAYOUT ===== */
+    .cs7-wrap { padding: 24px; }
+    .cs7-title-row { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; }
+    .cs7-title { font-size: 22px; font-weight: 800; }
+    .cs7-title b { color: var(--cyan); }
+    .cs7-sub { font-size: 12.5px; color: var(--txt-dim); }
+
+    /* ===== KPIs ===== */
+    .cs7-kpis {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px;
+    }
+    .cs7-kpi {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 13px;
+      padding: 16px 18px; position: relative; overflow: hidden;
+    }
+    .cs7-kpi::before {
+      content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+      background: var(--accent, var(--cyan));
+    }
+    .cs7-kpi .lbl { font-size: 11.5px; color: var(--txt-dim); font-weight: 500; margin-bottom: 8px; letter-spacing: .3px; }
+    .cs7-kpi .val { font-size: 22px; font-weight: 700; font-family: 'Space Mono'; letter-spacing: -.5px; }
+    .cs7-kpi .val.sm { font-size: 18px; }
+    .cs7-kpi .delta { font-size: 12px; font-weight: 600; margin-top: 3px; }
+    .pos { color: var(--green); }
+    .neg { color: var(--red); }
+
+    /* ===== GRID main ===== */
+    .cs7-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
+    .cs7-card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px;
+    }
+    .cs7-card h3 {
+      margin: 0 0 16px; font-size: 13px; font-weight: 700; letter-spacing: .4px;
+      color: var(--txt); display: flex; align-items: center; gap: 8px;
+    }
+    .cs7-card h3 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); }
+
+    /* ===== Donut ===== */
+    .cs7-donut-wrap { display: flex; align-items: center; gap: 22px; }
+    .cs7-legend { display: flex; flex-direction: column; gap: 9px; flex: 1; }
+    .cs7-leg-item { display: flex; align-items: center; gap: 9px; font-size: 12.5px; }
+    .cs7-leg-item .sw { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+    .cs7-leg-item .nm { flex: 1; color: var(--txt); }
+    .cs7-leg-item .pc { font-family: 'Space Mono'; color: var(--txt-dim); font-weight: 700; }
+
+    /* ===== Watchlist table ===== */
+    .cs7-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .cs7-table th {
+      text-align: right; padding: 9px 10px; color: var(--txt-dim); font-weight: 600;
+      font-size: 11px; border-bottom: 1px solid var(--border); letter-spacing: .3px;
+    }
+    .cs7-table th:first-child, .cs7-table td:first-child { text-align: left; }
+    .cs7-table td {
+      padding: 11px 10px; text-align: right; border-bottom: 1px solid var(--row-border);
+      font-family: 'Space Mono'; font-size: 12px;
+    }
+    .cs7-table tr:last-child td { border-bottom: none; }
+    .cs7-tk { font-family: 'Sora' !important; font-weight: 700; }
+    .cs7-tk small { display: block; font-weight: 400; color: var(--txt-dim); font-size: 10.5px; font-family: 'Sora'; }
+    .cs7-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px;
+      font-weight: 700; font-family: 'Sora'; letter-spacing: .3px;
+    }
+    .b-comprar { background: rgba(46,204,113,.16); color: var(--green); border: 1px solid rgba(46,204,113,.35); }
+    .b-esperar { background: rgba(245,166,35,.16); color: var(--amber); border: 1px solid rgba(245,166,35,.35); }
+    .b-cara { background: rgba(231,76,60,.16); color: var(--red); border: 1px solid rgba(231,76,60,.35); }
+    .b-pend { background: rgba(135,148,173,.12); color: var(--txt-dim); border: 1px solid rgba(135,148,173,.25); }
+    .tipo-pill { font-size: 10px; padding: 2px 8px; border-radius: 6px; font-family: 'Sora'; font-weight: 600; }
+    .t-dgi { background: rgba(74,140,255,.16); color: var(--blue); }
+    .t-vl { background: rgba(217,87,201,.16); color: var(--magenta); }
+
+    .cs7-foot { margin-top: 18px; font-size: 11px; color: var(--txt-dim); text-align: center; font-family: 'Space Mono'; }
+
+    /* Barras horizontales (sector) */
+    .cs7-bar-row { margin-bottom: 13px; }
+    .cs7-bar-row:last-child { margin-bottom: 0; }
+    .cs7-bar-head { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+    .cs7-bar-head .nm { color: var(--txt); font-weight: 500; }
+    .cs7-bar-head .pc { font-family: 'Space Mono'; color: var(--txt-dim); font-weight: 700; }
+    .cs7-bar-track { height: 9px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+    .cs7-bar-fill { height: 100%; border-radius: 6px; transition: width .8s cubic-bezier(.2,.8,.2,1); }
+
+    /* Placeholder */
+    .cs7-placeholder { text-align: center; padding: 30px 20px; }
+    .cs7-placeholder .ph-icon { font-size: 32px; opacity: .5; margin-bottom: 10px; }
+    .cs7-placeholder .ph-title { font-size: 14px; font-weight: 700; color: var(--txt); margin-bottom: 8px; }
+    .cs7-placeholder .ph-text { font-size: 12px; color: var(--txt-dim); line-height: 1.6; }
+
+    .sec-line { stroke: var(--txt-dim); }
+    .sec-nm { fill: var(--txt); }
+    .sec-pc { fill: var(--txt-dim); }
+
+    /* Pantalla grande / iPad Pro 12.9" landscape — aprovechar ancho */
+    @media (min-width: 1100px) {
+      .cs7-kpis { grid-template-columns: repeat(4, 1fr); }
+      .cs7-wrap { padding: 28px 32px; }
+    }
+    /* iPad Pro portrait y tablets medianas */
+    @media (max-width: 1099px) and (min-width: 761px) {
+      .cs7-kpis { grid-template-columns: repeat(4, 1fr); }
+      .cs7-grid { grid-template-columns: 1fr; }
+    }
+    /* Teléfono */
+    @media (max-width: 760px) {
+      .cs7-kpis { grid-template-columns: repeat(2, 1fr); }
+      .cs7-grid { grid-template-columns: 1fr; }
+      .cs7-nav { flex-wrap: wrap; gap: 6px; }
+      .cs7-wrap { padding: 16px; }
+      .cs7-kpi .val { font-size: 18px; }
+      .cs7-kpi .val.sm { font-size: 15px; }
+      .cs7-title { font-size: 18px; }
+      .cs7-donut-wrap { flex-direction: column; gap: 14px; }
+      .cs7-tab { padding: 7px 13px; font-size: 12.5px; }
+      .cs7-brand { margin-right: 8px; font-size: 14px; }
+    }
+    /* Teléfono chico */
+    @media (max-width: 420px) {
+      .cs7-kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
+      .cs7-kpi { padding: 12px 13px; }
+    }
+  </style>
+
+  <!-- NAV -->
+  <div class="cs7-nav">
+    <div class="cs7-brand">CS7 <span>· Sistema</span></div>
+    <div class="cs7-tab" onclick="cs7toast('Vista Finanzas — ya existe en tu dashboard actual')">💰 Finanzas</div>
+    <div class="cs7-tab active">📈 Inversiones</div>
+    <div class="cs7-nav-right">
+      <div class="cs7-clock" id="cs7-clock">—</div>
+      <button class="cs7-theme-btn" id="cs7-theme" title="Cambiar tema">🌙</button>
+    </div>
+  </div>
+
+  <div class="cs7-wrap">
+    <div class="cs7-title-row">
+      <div class="cs7-title">Portafolio <b>Dividendos</b></div>
+      <div class="cs7-sub">Bolsa de Santiago · CLP</div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="cs7-kpis" id="cs7-kpis"></div>
+
+    <!-- MAIN GRID -->
+    <div class="cs7-grid">
+      <div class="cs7-card">
+        <h3><span class="dot"></span> WATCHLIST · Veredicto de compra</h3>
+        <table class="cs7-table">
+          <thead>
+            <tr>
+              <th>Empresa</th><th>Tipo</th><th>Precio</th><th>Upside</th><th>DY est.</th><th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="cs7-wl"></tbody>
+        </table>
+      </div>
+
+      <div class="cs7-card">
+        <h3><span class="dot"></span> Distribución por peso</h3>
+        <div class="cs7-donut-wrap">
+          <div id="cs7-donut"></div>
+          <div class="cs7-legend" id="cs7-legend"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cs7-grid" style="margin-top:16px;">
+      <div class="cs7-card">
+        <h3><span class="dot"></span> Distribución por sector</h3>
+        <div id="cs7-donut-sector" style="display:flex;justify-content:center;"></div>
+      </div>
+      <div class="cs7-card">
+        <h3><span class="dot"></span> Distribución por estrategia</h3>
+        <div class="cs7-donut-wrap">
+          <div id="cs7-donut-strat"></div>
+          <div class="cs7-legend" id="cs7-legend-strat"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cs7-card" style="margin-top:16px;">
+      <h3><span class="dot"></span> Rentabilidad del portafolio vs IPSA</h3>
+      <div class="cs7-placeholder">
+        <div class="ph-icon">📈</div>
+        <div class="ph-title">Gráfico reservado</div>
+        <div class="ph-text">Se activará cuando el sistema acumule histórico del valor del portafolio y del IPSA.<br>Requiere registro periódico del valor de cartera (script o snapshot semanal).</div>
+      </div>
+    </div>
+
+    <div class="cs7-foot">Prototipo visual · datos de ejemplo · pendiente conexión Google Sheets API</div>
+  </div>
+
+  <script>
+  (function(){
+    // === DATA === (reemplazar por lectura de la Sheet vía API)
+    const PORTFOLIO = {
+      capital: 1351717,
+      valorActual: 1383356,
+      gp: 31639,
+      gpPct: 2.34,
+      yoc: 6.55,
+      divRecibidos: 80207,
+      divProyectado: 58414,
+      posiciones: 5
+    };
+    const WATCHLIST = [
+      { tk:'ENELGXCH', nm:'Enel Generación', tipo:'DGI', precio:535.05, upside:12.34, dy:6.74, accion:'Comprar' },
+      { tk:'ZOFRI',    nm:'Zofri S.A.',      tipo:'VL',  precio:1005,   upside:-10.10, dy:7.19, accion:'Cara' },
+      { tk:'HABITAT',  nm:'AFP Habitat',     tipo:'VL',  precio:1371.70, upside:null, dy:null, accion:'Pendiente' },
+      { tk:'LIPIGAS',  nm:'Lipigas S.A.',    tipo:'DGI', precio:8398,   upside:null, dy:null, accion:'Pendiente' }
+    ];
+    const WEIGHTS = [
+      { nm:'ENELGXCH', pct:48.06, color:'#38e0d0' },
+      { nm:'ZOFRI',    pct:18.63, color:'#f5c451' },
+      { nm:'QUINENCO', pct:14.59, color:'#4a8cff' },
+      { nm:'HABITAT',  pct:11.13, color:'#d957c9' },
+      { nm:'CHILE',    pct:7.59,  color:'#2ecc71' }
+    ];
+    const SECTORS = [
+      { nm:'Eléctrica',   pct:48.06, color:'#38e0d0' },
+      { nm:'Zona Franca', pct:18.63, color:'#f5c451' },
+      { nm:'Holding',     pct:14.59, color:'#4a8cff' },
+      { nm:'AFP',         pct:11.13, color:'#d957c9' },
+      { nm:'Banco',       pct:7.59,  color:'#2ecc71' }
+    ];
+    const STRATEGY = [
+      { nm:'DGI', pct:62.65, color:'#4a8cff' },
+      { nm:'VL',  pct:29.76, color:'#d957c9' },
+      { nm:'Sin clasificar', pct:7.59, color:'#8794ad' }
+    ];
+
+    const clp = n => '$' + Math.round(n).toLocaleString('es-CL');
+    const pct = n => (n>0?'+':'') + n.toFixed(2) + '%';
+
+    // KPIs
+    const kpis = [
+      { lbl:'Capital invertido', val:clp(PORTFOLIO.capital), accent:'#8794ad' },
+      { lbl:'G/P no realizada', val:clp(PORTFOLIO.gp), delta:pct(PORTFOLIO.gpPct), dpos:PORTFOLIO.gp>=0, accent:PORTFOLIO.gp>=0?'#2ecc71':'#e74c3c' },
+      { lbl:'Valor actual del portafolio', val:clp(PORTFOLIO.valorActual), accent:'#2fd4c4' },
+      { lbl:'YOC cartera', val:PORTFOLIO.yoc.toFixed(2)+'%', accent:'#f5c451' },
+      { lbl:'Dividendos recibidos', val:clp(PORTFOLIO.divRecibidos), accent:'#2ecc71' },
+      { lbl:'Div. anual proyectado', val:clp(PORTFOLIO.divProyectado), accent:'#4a8cff' },
+      { lbl:'Dividendo mensual promedio', val:clp(PORTFOLIO.divRecibidos/12), accent:'#d957c9' },
+      { lbl:'Rentab. + dividendos', val:pct(PORTFOLIO.gpPct + (PORTFOLIO.divRecibidos/PORTFOLIO.capital*100)), dpos:true, accent:'#2fd4c4' }
+    ];
+    document.getElementById('cs7-kpis').innerHTML = kpis.map(k=>`
+      <div class="cs7-kpi" style="--accent:${k.accent}">
+        <div class="lbl">${k.lbl}</div>
+        <div class="val ${k.val.length>10?'sm':''}">${k.val}</div>
+        ${k.delta?`<div class="delta ${k.dpos?'pos':'neg'}">${k.delta}</div>`:''}
+      </div>`).join('');
+
+    // Watchlist
+    const badgeClass = a => ({Comprar:'b-comprar',Esperar:'b-esperar',Cara:'b-cara',Pendiente:'b-pend'}[a]||'b-pend');
+    document.getElementById('cs7-wl').innerHTML = WATCHLIST.map(w=>`
+      <tr>
+        <td class="cs7-tk">${w.tk}<small>${w.nm}</small></td>
+        <td><span class="tipo-pill ${w.tipo==='DGI'?'t-dgi':'t-vl'}">${w.tipo}</span></td>
+        <td>${clp(w.precio)}</td>
+        <td class="${w.upside==null?'':(w.upside>=0?'pos':'neg')}">${w.upside==null?'—':pct(w.upside)}</td>
+        <td>${w.dy==null?'—':w.dy.toFixed(2)+'%'}</td>
+        <td><span class="cs7-badge ${badgeClass(w.accion)}">${w.accion}</span></td>
+      </tr>`).join('');
+
+    // Donut (SVG)
+    let acc = 0; const R=58, C=2*Math.PI*R;
+    const segs = WEIGHTS.map(w=>{
+      const len = w.pct/100*C, off = C - acc;
+      acc += len;
+      return `<circle r="${R}" cx="80" cy="80" fill="none" stroke="${w.color}" stroke-width="22"
+        stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${off}" transform="rotate(-90 80 80)"/>`;
+    }).join('');
+    document.getElementById('cs7-donut').innerHTML = `
+      <svg width="160" height="160" viewBox="0 0 160 160">
+        ${segs}
+        <text x="80" y="74" text-anchor="middle" fill="#e6ebf5" font-size="13" font-family="Space Mono" font-weight="700">5</text>
+        <text x="80" y="92" text-anchor="middle" fill="#8794ad" font-size="9" font-family="Sora">empresas</text>
+      </svg>`;
+    document.getElementById('cs7-legend').innerHTML = WEIGHTS.map(w=>`
+      <div class="cs7-leg-item">
+        <span class="sw" style="background:${w.color}"></span>
+        <span class="nm">${w.nm}</span>
+        <span class="pc">${w.pct.toFixed(1)}%</span>
+      </div>`).join('');
+
+    // Dona por sector con etiquetas conectadas (estilo video)
+    (function(){
+      const cx=150, cy=150, rOut=92, rIn=54, lblR=110;
+      let ang = -Math.PI/2;
+      const parts = SECTORS.map(s=>{
+        const a0=ang, a1=ang + s.pct/100*2*Math.PI; ang=a1;
+        const mid=(a0+a1)/2;
+        const arc=(r,a)=>[cx+r*Math.cos(a), cy+r*Math.sin(a)];
+        const [x0,y0]=arc(rOut,a0), [x1,y1]=arc(rOut,a1);
+        const [ix1,iy1]=arc(rIn,a1), [ix0,iy0]=arc(rIn,a0);
+        const large=(a1-a0)>Math.PI?1:0;
+        const d=`M${x0},${y0} A${rOut},${rOut} 0 ${large} 1 ${x1},${y1} L${ix1},${iy1} A${rIn},${rIn} 0 ${large} 0 ${ix0},${iy0} Z`;
+        // etiqueta
+        const [lx,ly]=arc(rOut,mid), [ex,ey]=arc(lblR,mid);
+        const side = Math.cos(mid)>=0 ? 1 : -1;
+        const tx = ex + side*8;
+        return { d, color:s.color, nm:s.nm, pct:s.pct, lx,ly,ex,ey,tx,ty:ey, anchor: side>0?'start':'end' };
+      });
+      const paths = parts.map(p=>`<path d="${p.d}" fill="${p.color}" stroke="var(--panel)" stroke-width="1.5"/>`).join('');
+      const lines = parts.map(p=>`
+        <polyline points="${p.lx},${p.ly} ${p.ex},${p.ey} ${p.tx},${p.ty}" fill="none" class="sec-line" stroke-width="1" opacity=".5"/>
+        <text x="${p.tx + (p.anchor==='start'?2:-2)}" y="${p.ty-2}" text-anchor="${p.anchor}" class="sec-nm" font-size="10.5" font-family="Sora" font-weight="600">${p.nm}</text>
+        <text x="${p.tx + (p.anchor==='start'?2:-2)}" y="${p.ty+10}" text-anchor="${p.anchor}" class="sec-pc" font-size="10" font-family="Space Mono">${p.pct.toFixed(1)}%</text>`).join('');
+      document.getElementById('cs7-donut-sector').innerHTML =
+        `<svg width="300" height="300" viewBox="0 0 300 300" style="max-width:100%;height:auto;">${paths}${lines}</svg>`;
+    })();
+
+    // Dona por estrategia
+    let accS = 0;
+    const segsS = STRATEGY.map(s=>{
+      const len = s.pct/100*C, off = C - accS; accS += len;
+      return `<circle r="${R}" cx="80" cy="80" fill="none" stroke="${s.color}" stroke-width="22"
+        stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${off}" transform="rotate(-90 80 80)"/>`;
+    }).join('');
+    document.getElementById('cs7-donut-strat').innerHTML = `
+      <svg width="160" height="160" viewBox="0 0 160 160">${segsS}
+        <text x="80" y="74" text-anchor="middle" fill="#e6ebf5" font-size="12" font-family="Space Mono" font-weight="700">DGI/VL</text>
+        <text x="80" y="92" text-anchor="middle" fill="#8794ad" font-size="9" font-family="Sora">mezcla</text>
+      </svg>`;
+    document.getElementById('cs7-legend-strat').innerHTML = STRATEGY.map(s=>`
+      <div class="cs7-leg-item">
+        <span class="sw" style="background:${s.color}"></span>
+        <span class="nm">${s.nm}</span>
+        <span class="pc">${s.pct.toFixed(1)}%</span>
+      </div>`).join('');
+    const tick = ()=>{ const d=new Date(); document.getElementById('cs7-clock').textContent =
+      d.toLocaleDateString('es-CL') + ' · ' + d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'}); };
+    tick(); setInterval(tick, 30000);
+
+    // Theme toggle
+    const app = document.getElementById('cs7-app');
+    const tbtn = document.getElementById('cs7-theme');
+    tbtn.addEventListener('click', ()=>{
+      app.classList.toggle('light');
+      const light = app.classList.contains('light');
+      tbtn.textContent = light ? '☀️' : '🌙';
+      // redraw donut text color
+      const txtCol = getComputedStyle(app).getPropertyValue('--txt').trim();
+      const dimCol = getComputedStyle(app).getPropertyValue('--txt-dim').trim();
+      document.querySelectorAll('#cs7-donut text, #cs7-donut-strat text').forEach((t,i)=>{
+        t.setAttribute('fill', i%2===0 ? txtCol : dimCol);
+      });
+    });
+
+    window.cs7toast = m => { const t=document.createElement('div');
+      t.textContent=m; t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#161d30;color:#e6ebf5;padding:12px 20px;border-radius:10px;border:1px solid #1f2940;font-family:Sora;font-size:13px;z-index:9999;box-shadow:0 8px 30px rgba(0,0,0,.5)';
+      document.body.appendChild(t); setTimeout(()=>t.remove(),2600); };
+  })();
+  </script>
+</div>
+
+</body>
+</html>
