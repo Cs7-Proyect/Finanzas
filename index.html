@@ -411,11 +411,12 @@ function renderEvol(){
 
 async function cargarTC(mesKey){
   try{
-    const rows=await fetchSheet("'Tarjeta de Crédito'!A36:X42");
+    const rows=await fetchSheet("'Tarjeta de Crédito'!A1:X500");
     const tcMesMap={
       'dic-25':0,'ene-26':1,'feb-26':2,'mar-26':3,'abr-26':4,
       'may-26':5,'jun-26':6,'jul-26':7,'ago-26':8,'sep-26':9,
-      'oct-26':10,'nov-26':11,'dic-26':12,'ene-27':13
+      'oct-26':10,'nov-26':11,'dic-26':12,'ene-27':13,
+      'feb-27':14,'mar-27':15,'abr-27':16,'may-27':17
     };
     const mesesTC=['Dic-25','Ene-26','Feb-26','Mar-26','Abr-26','May-26','Jun-26','Jul-26','Ago-26','Sep-26','Oct-26','Nov-26','Dic-26','Ene-27','Feb-27','Mar-27','Abr-27','May-27'];
     const idxMes=tcMesMap[mesKey]!==undefined?tcMesMap[mesKey]:5;
