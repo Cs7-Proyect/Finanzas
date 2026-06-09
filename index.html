@@ -164,9 +164,10 @@ function procesarRegistro(rows){
     const monto=parseMonto(row[6]);
     const tipo=(row[8]||'').trim();
     if(!mes||!cat) return;
-    if(!meses[mes]) meses[mes]={mes,ingresos:0,ahorro:0,inversion:0,costoFin:0,gastos:{}};
+    if(!meses[mes]) meses[mes]={mes,ingresos:0,ahorro:0,inversion:0,costoFin:0,flujoExtra:0,gastos:{}};
     const m=meses[mes];
     if(tipo==='Ingreso') m.ingresos+=Math.abs(monto);
+    else if(tipo==='Inversión') m.inversion+=Math.abs(monto);
     else if(tipo==='Ahorro'){
       if(sub==='Aporte inversiones') m.inversion+=Math.abs(monto);
       else m.ahorro+=Math.abs(monto);
@@ -177,8 +178,13 @@ function procesarRegistro(rows){
       if(!m.gastos[cat][sub]) m.gastos[cat][sub]=0;
       m.gastos[cat][sub]+=Math.abs(monto);
     } else if(tipo==='Devolución'){
-      if(m.gastos[cat]&&m.gastos[cat][sub])
+      if(cat==='Préstamos'){
+        // Devolución de préstamo: flujo disponible, no resta de gastos
+        m.flujoExtra+=Math.abs(monto);
+      } else if(m.gastos[cat]&&m.gastos[cat][sub]){
+        // Devolución de gasto compartido: resta del gasto neto
         m.gastos[cat][sub]=Math.max(0,m.gastos[cat][sub]-Math.abs(monto));
+      }
     }
   });
   return meses;
@@ -208,6 +214,13 @@ function renderTodo(mesKey){
       <div class="mc"><p class="mc-lbl">Inversión</p><p class="mc-val" style="color:#6C63FF">${d.inversion?fmtC(d.inversion):'—'}</p><p class="mc-sub">dividendos</p></div>
       <div class="mc"><p class="mc-lbl">Costo TC</p><p class="mc-val neg">${d.costoFin?fmtC(d.costoFin):'—'}</p><p class="mc-sub">financiero</p></div>
     </div>
+    ${d.flujoExtra?`<div style="background:#1A2A24;border:1px solid #1A5C3A;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div>
+        <span style="font-size:12px;color:#9090A8;">Flujo disponible del mes</span>
+        <span style="font-size:11px;color:#7070A0;display:block;">Sueldo + devoluciones de préstamos recibidas</span>
+      </div>
+      <span style="font-size:18px;font-weight:700;color:#4ADE80;">${fmtC(d.ingresos+d.flujoExtra)}</span>
+    </div>`:''}
     <div class="card">
       <p class="card-ttl">Distribución de gastos · ${labelMes(mesKey)}</p>
       <div class="torta-layout">
