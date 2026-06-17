@@ -313,47 +313,118 @@
 
   <script>
   (function(){
-    // === DATA === (reemplazar por lectura de la Sheet vía API)
-    const PORTFOLIO = {
-      capital: 1351717,
-      valorActual: 1383356,
-      gp: 31639,
-      gpPct: 2.34,
-      yoc: 6.55,
-      divRecibidos: 80207,
-      divProyectado: 58414,
-      posiciones: 5
-    };
-    const WATCHLIST = [
-      { tk:'ENELGXCH', nm:'Enel Generación', tipo:'DGI', precio:535.05, upside:12.34, dy:6.74, accion:'Comprar' },
-      { tk:'ZOFRI',    nm:'Zofri S.A.',      tipo:'VL',  precio:1005,   upside:-10.10, dy:7.19, accion:'Cara' },
-      { tk:'HABITAT',  nm:'AFP Habitat',     tipo:'VL',  precio:1371.70, upside:null, dy:null, accion:'Pendiente' },
-      { tk:'LIPIGAS',  nm:'Lipigas S.A.',    tipo:'DGI', precio:8398,   upside:null, dy:null, accion:'Pendiente' }
-    ];
-    const WEIGHTS = [
-      { nm:'ENELGXCH', pct:48.06, color:'#38e0d0' },
-      { nm:'ZOFRI',    pct:18.63, color:'#f5c451' },
-      { nm:'QUINENCO', pct:14.59, color:'#4a8cff' },
-      { nm:'HABITAT',  pct:11.13, color:'#d957c9' },
-      { nm:'CHILE',    pct:7.59,  color:'#2ecc71' }
-    ];
-    const SECTORS = [
-      { nm:'Eléctrica',   pct:48.06, color:'#38e0d0' },
-      { nm:'Zona Franca', pct:18.63, color:'#f5c451' },
-      { nm:'Holding',     pct:14.59, color:'#4a8cff' },
-      { nm:'AFP',         pct:11.13, color:'#d957c9' },
-      { nm:'Banco',       pct:7.59,  color:'#2ecc71' }
-    ];
-    const STRATEGY = [
-      { nm:'DGI', pct:62.65, color:'#4a8cff' },
-      { nm:'VL',  pct:29.76, color:'#d957c9' },
-      { nm:'Sin clasificar', pct:7.59, color:'#8794ad' }
-    ];
+    // === CONEXIÓN GOOGLE SHEETS API ===
+    const SHEET_ID = '1fUkt0QUzhkij2ntCMVcPAxwMIc-6xLLgkxpFr8QwQl0';
+    const API_KEY  = 'AIzaSyBHsShdY2t39L_WhC1vXQhpjH_eOVEjmNU';
+
+    const PALETTE = ['#38e0d0','#f5c451','#4a8cff','#d957c9','#2ecc71','#f5a623','#e74c3c','#9b8cff'];
+
+    async function fetchSheet(range){
+      const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?key=${API_KEY}`;
+      const r=await fetch(url);
+      if(!r.ok){const e=await r.json();throw new Error(e.error?.message||'Error '+r.status);}
+      const d=await r.json();
+      return d.values||[];
+    }
+    // Parseo robusto de montos chilenos: "$1.234,56" -> 1234.56 ; "-12,34%" -> -12.34
+    function num(v){
+      if(v==null) return 0;
+      let s=v.toString().replace(/\$/g,'').replace(/%/g,'').replace(/\s/g,'').trim();
+      if(s==='') return 0;
+      s=s.replace(/\./g,'').replace(/,/g,'.');
+      const n=parseFloat(s);
+      return isNaN(n)?0:n;
+    }
+
+    // Variables que llenará la API
+    let PORTFOLIO={capital:0,valorActual:0,gp:0,gpPct:0,yoc:0,divRecibidos:0,divProyectado:0,posiciones:0};
+    let WATCHLIST=[], WEIGHTS=[], SECTORS=[], STRATEGY=[];
 
     const clp = n => '$' + Math.round(n).toLocaleString('es-CL');
     const pct = n => (n>0?'+':'') + n.toFixed(2) + '%';
 
-    // KPIs
+    async function cargarDatos(){
+      // --- SEGUIMIENTO (A3:O, una fila por empresa) ---
+      const seg = await fetchSheet("'Seguimiento'!A3:O20");
+      let capital=0, valorActual=0, divRecibidos=0, divProyectado=0, posiciones=0, yocSum=0, yocCount=0;
+      const sectoresMap={}, estrategiaMap={};
+      const pesos=[];
+      seg.forEach(r=>{
+        const tk=(r[0]||'').trim();
+        if(!tk) return;
+        const nAcc=num(r[3]);
+        const cap=num(r[5]);
+        const valAct=num(r[7]);
+        const yoc=num(r[10]);
+        const divRec=num(r[11]);
+        const divProy=num(r[12]);
+        if(cap>0){
+          capital+=cap; valorActual+=valAct; posiciones++;
+          if(yoc>0){ yocSum+=yoc*cap; yocCount+=cap; }
+          pesos.push({nm:tk, cap});
+        }
+        divRecibidos+=divRec;
+        divProyectado+=divProy;
+      });
+      PORTFOLIO.capital=capital;
+      PORTFOLIO.valorActual=valorActual;
+      PORTFOLIO.gp=valorActual-capital;
+      PORTFOLIO.gpPct=capital>0?((valorActual-capital)/capital*100):0;
+      PORTFOLIO.yoc=yocCount>0?(yocSum/yocCount):0;  // YOC ponderado por capital
+      PORTFOLIO.divRecibidos=divRecibidos;
+      PORTFOLIO.divProyectado=divProyectado;
+      PORTFOLIO.posiciones=posiciones;
+      // Pesos por empresa
+      pesos.forEach((p,i)=>{ p.pct=capital>0?(p.cap/capital*100):0; p.color=PALETTE[i%PALETTE.length]; });
+      WEIGHTS=pesos;
+
+      // --- WATCHLIST (A13:M, encabezados en fila 12) ---
+      const wl = await fetchSheet("'Watchlist'!A13:M30");
+      WATCHLIST=[]; const secAgg={}, strAgg={};
+      wl.forEach(r=>{
+        const tk=(r[0]||'').trim();
+        if(!tk) return;
+        const nm=(r[1]||'').trim();
+        const tipo=(r[2]||'').trim();
+        const precio=num(r[3]);
+        const upsideRaw=(r[5]||'').toString().trim();
+        const dyRaw=(r[6]||'').toString().trim();
+        const accion=(r[10]||'').trim();
+        const sector=(r[11]||'').trim();
+        const tieneAnalisis = upsideRaw!=='' ;
+        WATCHLIST.push({
+          tk, nm, tipo,
+          precio,
+          upside: tieneAnalisis?num(r[5]):null,
+          dy: dyRaw!==''?num(r[6]):null,
+          accion: accion||'Pendiente'
+        });
+      });
+
+      // --- Distribución por sector y estrategia (desde Seguimiento + Watchlist) ---
+      // Sector: lo tomamos de la Watchlist (col Sector) cruzando peso del Seguimiento
+      const pesoPorTk={}; WEIGHTS.forEach(w=>pesoPorTk[w.nm]=w.pct);
+      const sectorPorTk={}, tipoPorTk={};
+      wl.forEach(r=>{
+        const tk=(r[0]||'').trim(); if(!tk) return;
+        sectorPorTk[tk]=(r[11]||'').trim()||'Sin sector';
+        tipoPorTk[tk]=(r[2]||'').trim()||'Sin clasificar';
+      });
+      // sumar pesos por sector y por tipo
+      WEIGHTS.forEach(w=>{
+        const sec=sectorPorTk[w.nm]||'Sin sector';
+        secAgg[sec]=(secAgg[sec]||0)+w.pct;
+        const tp=tipoPorTk[w.nm]||'Sin clasificar';
+        strAgg[tp]=(strAgg[tp]||0)+w.pct;
+      });
+      SECTORS=Object.entries(secAgg).map(([nm,pct],i)=>({nm,pct,color:PALETTE[i%PALETTE.length]}));
+      const strColors={'DGI':'#4a8cff','VL':'#d957c9','Sin clasificar':'#8794ad'};
+      STRATEGY=Object.entries(strAgg).map(([nm,pct])=>({nm,pct,color:strColors[nm]||'#8794ad'}));
+    }
+
+    // ===== RENDER (se llama después de cargar datos) =====
+    function render(){
+
     const kpis = [
       { lbl:'Capital invertido', val:clp(PORTFOLIO.capital), accent:'#8794ad' },
       { lbl:'G/P no realizada', val:clp(PORTFOLIO.gp), delta:pct(PORTFOLIO.gpPct), dpos:PORTFOLIO.gp>=0, accent:PORTFOLIO.gp>=0?'#2ecc71':'#e74c3c' },
@@ -449,6 +520,9 @@
         <span class="nm">${s.nm}</span>
         <span class="pc">${s.pct.toFixed(1)}%</span>
       </div>`).join('');
+    } // ← fin de render()
+
+    // ===== Clock (independiente de los datos) =====
     const tick = ()=>{ const d=new Date(); document.getElementById('cs7-clock').textContent =
       d.toLocaleDateString('es-CL') + ' · ' + d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'}); };
     tick(); setInterval(tick, 30000);
@@ -460,7 +534,6 @@
       app.classList.toggle('light');
       const light = app.classList.contains('light');
       tbtn.textContent = light ? '☀️' : '🌙';
-      // redraw donut text color
       const txtCol = getComputedStyle(app).getPropertyValue('--txt').trim();
       const dimCol = getComputedStyle(app).getPropertyValue('--txt-dim').trim();
       document.querySelectorAll('#cs7-donut text, #cs7-donut-strat text').forEach((t,i)=>{
@@ -471,6 +544,19 @@
     window.cs7toast = m => { const t=document.createElement('div');
       t.textContent=m; t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#161d30;color:#e6ebf5;padding:12px 20px;border-radius:10px;border:1px solid #1f2940;font-family:Sora;font-size:13px;z-index:9999;box-shadow:0 8px 30px rgba(0,0,0,.5)';
       document.body.appendChild(t); setTimeout(()=>t.remove(),2600); };
+
+    // ===== INICIO: cargar datos reales y renderizar =====
+    cargarDatos()
+      .then(render)
+      .catch(err=>{
+        console.error(err);
+        document.getElementById('cs7-kpis').innerHTML =
+          `<div class="cs7-kpi" style="grid-column:1/-1;--accent:#e74c3c">
+            <div class="lbl">Error al conectar con la planilla</div>
+            <div class="val sm" style="font-size:14px">${err.message}</div>
+            <div class="delta" style="color:#8794ad;font-weight:400;margin-top:8px">Verifica que la Sheet esté pública como lectura y que los nombres de hoja sean correctos.</div>
+          </div>`;
+      });
   })();
   </script>
 </div>
