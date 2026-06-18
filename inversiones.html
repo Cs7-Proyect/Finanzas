@@ -51,7 +51,6 @@
       padding: 0;
       margin: 0;
       border-radius: 16px;
-      overflow: hidden;
       box-shadow: var(--shadow);
       transition: background .3s ease, color .3s ease;
     }
@@ -164,11 +163,14 @@
 
     /* Scroll horizontal táctil para la tabla en pantallas angostas */
     .cs7-table-scroll {
-      overflow-x: auto;
+      overflow-x: scroll;
+      overflow-y: hidden;
       -webkit-overflow-scrolling: touch;
+      touch-action: pan-x;
       scrollbar-width: thin;
+      max-width: 100%;
     }
-    .cs7-table-scroll .cs7-table { min-width: 480px; }
+    .cs7-table-scroll .cs7-table { min-width: 480px; width: max-content; }
     .cs7-table-scroll::-webkit-scrollbar { height: 6px; }
     .cs7-table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
     .cs7-scroll-hint {
