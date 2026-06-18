@@ -159,6 +159,23 @@
       font-family: 'Space Mono'; font-size: 12px;
     }
     .cs7-table tr:last-child td { border-bottom: none; }
+
+    /* Scroll horizontal táctil para la tabla en pantallas angostas */
+    .cs7-table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .cs7-table-scroll .cs7-table { min-width: 480px; }
+    .cs7-table-scroll::-webkit-scrollbar { height: 6px; }
+    .cs7-table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .cs7-scroll-hint {
+      display: none; text-align: center; font-size: 10.5px; color: var(--txt-dim);
+      margin-top: 8px; font-family: 'Space Mono';
+    }
+    @media (max-width: 760px) {
+      .cs7-scroll-hint { display: block; }
+    }
     .cs7-tk { font-family: 'Sora' !important; font-weight: 700; }
     .cs7-tk small { display: block; font-weight: 400; color: var(--txt-dim); font-size: 10.5px; font-family: 'Sora'; }
     .cs7-badge {
@@ -266,14 +283,17 @@
     <div class="cs7-grid">
       <div class="cs7-card">
         <h3><span class="dot"></span> WATCHLIST · Veredicto de compra</h3>
-        <table class="cs7-table">
-          <thead>
-            <tr>
-              <th>Empresa</th><th>Tipo</th><th>Precio</th><th>Upside</th><th>DY est.</th><th>Acción</th>
-            </tr>
-          </thead>
-          <tbody id="cs7-wl"></tbody>
-        </table>
+        <div class="cs7-table-scroll">
+          <table class="cs7-table">
+            <thead>
+              <tr>
+                <th>Empresa</th><th>Tipo</th><th>Precio</th><th>Upside</th><th>DY est.</th><th>DY UPA</th><th>PER</th><th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="cs7-wl"></tbody>
+          </table>
+        </div>
+        <div class="cs7-scroll-hint">← desliza para ver más →</div>
       </div>
 
       <div class="cs7-card">
@@ -379,36 +399,42 @@
       WEIGHTS=pesos;
 
       // --- WATCHLIST (A13:M, encabezados en fila 12) ---
-      const wl = await fetchSheet("'Watchlist'!A13:M30");
+      const wl = await fetchSheet("'Watchlist'!A13:P30");
       WATCHLIST=[]; const secAgg={}, strAgg={};
       wl.forEach(r=>{
         const tk=(r[0]||'').trim();
         if(!tk) return;
         const nm=(r[1]||'').trim();
-        const tipo=(r[2]||'').trim();
-        const precio=num(r[3]);
-        const upsideRaw=(r[5]||'').toString().trim();
-        const dyRaw=(r[6]||'').toString().trim();
-        const accion=(r[10]||'').trim();
-        const sector=(r[11]||'').trim();
+        // Estructura actual: A Ticker, B Empresa, C Rent.exigida, D Tipo, E Precio,
+        // F PrecioMáx, G Upside, H DY est, I DY UPA, J PER, K PayOUT, L B/L, M Graham,
+        // N Semáforo/veredicto, O Sector, P Última actualización
+        const tipo=(r[3]||'').trim();
+        const precio=num(r[4]);
+        const upsideRaw=(r[6]||'').toString().trim();
+        const dyRaw=(r[7]||'').toString().trim();
+        const dyUpaRaw=(r[8]||'').toString().trim();
+        const perRaw=(r[9]||'').toString().trim();
+        const accion=(r[13]||'').trim();
+        const sector=(r[14]||'').trim();
         const tieneAnalisis = upsideRaw!=='' ;
         WATCHLIST.push({
           tk, nm, tipo,
           precio,
-          upside: tieneAnalisis?num(r[5]):null,
-          dy: dyRaw!==''?num(r[6]):null,
+          upside: tieneAnalisis?num(r[6]):null,
+          dy: dyRaw!==''?num(r[7]):null,
+          dyUpa: dyUpaRaw!==''?num(r[8]):null,
+          per: perRaw!==''?num(r[9]):null,
           accion: accion||'Pendiente'
         });
       });
 
       // --- Distribución por sector y estrategia (desde Seguimiento + Watchlist) ---
-      // Sector: lo tomamos de la Watchlist (col Sector) cruzando peso del Seguimiento
       const pesoPorTk={}; WEIGHTS.forEach(w=>pesoPorTk[w.nm]=w.pct);
       const sectorPorTk={}, tipoPorTk={};
       wl.forEach(r=>{
         const tk=(r[0]||'').trim(); if(!tk) return;
-        sectorPorTk[tk]=(r[11]||'').trim()||'Sin sector';
-        tipoPorTk[tk]=(r[2]||'').trim()||'Sin clasificar';
+        sectorPorTk[tk]=(r[14]||'').trim()||'Sin sector';
+        tipoPorTk[tk]=(r[3]||'').trim()||'Sin clasificar';
       });
       // sumar pesos por sector y por tipo
       WEIGHTS.forEach(w=>{
@@ -451,6 +477,8 @@
         <td>${clp(w.precio)}</td>
         <td class="${w.upside==null?'':(w.upside>=0?'pos':'neg')}">${w.upside==null?'—':pct(w.upside)}</td>
         <td>${w.dy==null?'—':w.dy.toFixed(2)+'%'}</td>
+        <td>${w.dyUpa==null?'—':w.dyUpa.toFixed(2)+'%'}</td>
+        <td>${w.per==null?'—':w.per.toFixed(2)}</td>
         <td><span class="cs7-badge ${badgeClass(w.accion)}">${w.accion}</span></td>
       </tr>`).join('');
 
