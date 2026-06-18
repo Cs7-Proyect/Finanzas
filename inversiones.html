@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0a0e1a">
 <title>CS7 · Inversiones</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722%27 fill=%27%230a0e1a%27/%3E%3Ctext x=%2750%27 y=%2766%27 font-size=%2748%27 text-anchor=%27middle%27 fill=%27%2338e0d0%27 font-family=%27sans-serif%27 font-weight=%27bold%27%3E7%3C/text%3E%3C/svg%3E">
 <style>
   * { margin: 0; padding: 0; }
@@ -262,6 +263,40 @@
       .cs7-kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
       .cs7-kpi { padding: 12px 13px; }
     }
+
+    /* ===== SUB-PESTAÑAS Portafolio | Dividendos ===== */
+    .cs7-subtabs { display: flex; gap: 6px; margin: 4px 0 22px; border-bottom: 1px solid var(--border); }
+    .cs7-subtab {
+      padding: 10px 20px; font-family: 'Sora'; font-size: 14px; font-weight: 600;
+      color: var(--txt-dim); cursor: pointer; border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: color .2s, border-color .2s;
+    }
+    .cs7-subtab:hover { color: var(--txt); }
+    .cs7-subtab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .cs7-page { display: none; }
+    .cs7-page.active { display: block; }
+
+    /* ===== Calendario de dividendos ===== */
+    .cs7-cal-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+    .cs7-year-sel {
+      background: var(--panel-2); color: var(--txt); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 14px; font-family: 'Space Mono'; font-size: 13px; cursor: pointer;
+    }
+    .cs7-cal-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 720px; }
+    .cs7-cal-table th { text-align: right; padding: 9px 7px; color: var(--txt-dim); font-weight: 600; font-family: 'Sora'; }
+    .cs7-cal-table th:first-child { text-align: left; }
+    .cs7-cal-table td { text-align: right; padding: 9px 7px; font-family: 'Space Mono'; font-size: 11.5px; border-bottom: 1px solid var(--row-border); }
+    .cs7-cal-table td:first-child { text-align: left; font-family: 'Sora'; font-weight: 600; font-size: 12.5px; }
+    .cs7-cal-table .cal-pay { background: rgba(56,224,208,.12); color: var(--accent); border-radius: 4px; }
+    .cs7-cal-table .cal-empty { color: var(--txt-dim); opacity: .4; }
+    .cs7-cal-table tfoot td { border-top: 1px solid var(--border); border-bottom: none; font-weight: 700; color: var(--txt); padding-top: 11px; }
+    .cs7-cal-table .col-tot { color: var(--txt); font-weight: 700; }
+
+    .cs7-chartbox { position: relative; }
+    .cs7-chart-cap { font-size: 11px; color: var(--txt-dim); margin-bottom: 10px; font-family: 'Space Mono'; }
+    @media (max-width: 760px) {
+      .cs7-subtab { padding: 9px 15px; font-size: 13px; }
+    }
   </style>
 
   <!-- NAV -->
@@ -280,6 +315,15 @@
       <div class="cs7-title">Portafolio <b>Dividendos</b></div>
       <div class="cs7-sub">Bolsa de Santiago · CLP</div>
     </div>
+
+    <!-- SUB-PESTAÑAS -->
+    <div class="cs7-subtabs">
+      <div class="cs7-subtab active" data-page="portafolio" onclick="cs7ShowPage('portafolio',this)">Portafolio</div>
+      <div class="cs7-subtab" data-page="dividendos" onclick="cs7ShowPage('dividendos',this)">Dividendos</div>
+    </div>
+
+    <!-- ============ PÁGINA PORTAFOLIO ============ -->
+    <div class="cs7-page active" id="page-portafolio">
 
     <!-- KPIs -->
     <div class="cs7-kpis" id="cs7-kpis"></div>
@@ -333,7 +377,73 @@
       </div>
     </div>
 
-    <div class="cs7-foot">Prototipo visual · datos de ejemplo · pendiente conexión Google Sheets API</div>
+    </div><!-- /page-portafolio -->
+
+    <!-- ============ PÁGINA DIVIDENDOS ============ -->
+    <div class="cs7-page" id="page-dividendos">
+
+      <!-- KPIs dividendos -->
+      <div class="cs7-kpis" id="cs7-div-kpis"></div>
+
+      <!-- Calendario -->
+      <div class="cs7-card" style="margin-top:16px;">
+        <div class="cs7-cal-head">
+          <h3 style="margin:0;"><span class="dot"></span> Calendario de dividendos</h3>
+          <select class="cs7-year-sel" id="cs7-year-sel" onchange="cs7RenderCalendario()"></select>
+        </div>
+        <div class="cs7-table-scroll">
+          <table class="cs7-cal-table">
+            <thead>
+              <tr>
+                <th>Empresa</th>
+                <th>Ene</th><th>Feb</th><th>Mar</th><th>Abr</th><th>May</th><th>Jun</th>
+                <th>Jul</th><th>Ago</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dic</th>
+                <th class="col-tot">Total</th>
+              </tr>
+            </thead>
+            <tbody id="cs7-cal-body"></tbody>
+            <tfoot><tr id="cs7-cal-foot"></tr></tfoot>
+          </table>
+        </div>
+        <div class="cs7-scroll-hint">← desliza para ver todos los meses →</div>
+      </div>
+
+      <!-- Máximos pagadores + Desempeño por empresa -->
+      <div class="cs7-grid" style="margin-top:16px;">
+        <div class="cs7-card">
+          <h3><span class="dot"></span> Máximos pagadores</h3>
+          <div class="cs7-chartbox" style="height:240px;"><canvas id="cs7-ch-pagadores"></canvas></div>
+        </div>
+        <div class="cs7-card">
+          <h3><span class="dot"></span> Desempeño histórico por empresa</h3>
+          <div class="cs7-chartbox" style="height:240px;"><canvas id="cs7-ch-desempeno"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Comparativa mensual por año -->
+      <div class="cs7-card" style="margin-top:16px;">
+        <h3><span class="dot"></span> Comparativa de dividendos mensual por año</h3>
+        <div class="cs7-chart-cap">Cada año en una barra distinta — se irá llenando con 2027, 2028…</div>
+        <div class="cs7-chartbox" style="height:260px;"><canvas id="cs7-ch-mensual"></canvas></div>
+      </div>
+
+      <!-- Evolución mensual + anual -->
+      <div class="cs7-grid" style="margin-top:16px;">
+        <div class="cs7-card">
+          <h3><span class="dot"></span> Evolución de dividendos mensuales</h3>
+          <div class="cs7-chart-cap">Acumulando histórico mes a mes</div>
+          <div class="cs7-chartbox" style="height:220px;"><canvas id="cs7-ch-evol"></canvas></div>
+        </div>
+        <div class="cs7-card">
+          <h3><span class="dot"></span> Evolución de dividendos anuales</h3>
+          <div class="cs7-chart-cap">Total cobrado por año</div>
+          <div class="cs7-chartbox" style="height:220px;"><canvas id="cs7-ch-anual"></canvas></div>
+        </div>
+      </div>
+
+    </div><!-- /page-dividendos -->
+
+    <div class="cs7-foot">CS7 · Sistema · conectado a Google Sheets</div>
   </div>
 
   <script>
@@ -364,6 +474,10 @@
     // Variables que llenará la API
     let PORTFOLIO={capital:0,valorActual:0,gp:0,gpPct:0,yoc:0,divRecibidos:0,divProyectado:0,posiciones:0};
     let WATCHLIST=[], WEIGHTS=[], SECTORS=[], STRATEGY=[];
+    let DIVIDENDOS=[];
+    let CHARTS={};
+    const DIVPALETTE=['#38e0d0','#f5c451','#4a8cff','#d957c9','#2ecc71','#f5a623','#e74c3c','#9b8cff','#ff6b9d','#5ad1e6'];
+    const MESES_CORTO=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
     const clp = n => '$' + Math.round(n).toLocaleString('es-CL');
     const pct = n => (n>0?'+':'') + n.toFixed(2) + '%';
@@ -451,6 +565,26 @@
       SECTORS=Object.entries(secAgg).map(([nm,pct],i)=>({nm,pct,color:PALETTE[i%PALETTE.length]}));
       const strColors={'DGI':'#4a8cff','VL':'#d957c9','Sin clasificar':'#8794ad'};
       STRATEGY=Object.entries(strAgg).map(([nm,pct])=>({nm,pct,color:strColors[nm]||'#8794ad'}));
+
+      // --- DIVIDENDOS RECIBIDOS ---
+      // Columnas: A Fecha cobro, B Ticker, C Empresa, D N°acciones, E Monto/acción, F Monto total, G Tipo, H Año
+      try {
+        const dr = await fetchSheet("'Dividendos Recibidos'!A2:H200");
+        DIVIDENDOS = [];
+        dr.forEach(r=>{
+          const fecha=(r[0]||'').toString().trim();
+          const ticker=(r[1]||'').trim();
+          if(!ticker || !fecha) return;
+          const montoTotal=num(r[5]);
+          let anio = r[7]?parseInt(num(r[7])):0;
+          let mes = 0;
+          // Parsear fecha dd-mm-yyyy o dd/mm/yyyy
+          const m = fecha.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/);
+          if(m){ mes=parseInt(m[2]); if(!anio) anio=parseInt(m[3].length===2?'20'+m[3]:m[3]); }
+          if(!mes || !anio) return;
+          DIVIDENDOS.push({ ticker, anio, mes, monto: montoTotal });
+        });
+      } catch(e){ console.warn('No se pudo leer Dividendos Recibidos:', e.message); DIVIDENDOS=[]; }
     }
 
     // ===== RENDER (se llama después de cargar datos) =====
@@ -554,6 +688,154 @@
         <span class="pc">${s.pct.toFixed(1)}%</span>
       </div>`).join('');
     } // ← fin de render()
+
+    // ===== PESTAÑA DIVIDENDOS =====
+    window.cs7ShowPage = function(page, el){
+      document.querySelectorAll('.cs7-page').forEach(p=>p.classList.remove('active'));
+      document.querySelectorAll('.cs7-subtab').forEach(t=>t.classList.remove('active'));
+      document.getElementById('page-'+page).classList.add('active');
+      if(el) el.classList.add('active');
+      if(page==='dividendos' && !window._divRendered){ renderDividendos(); window._divRendered=true; }
+    };
+
+    function aniosDisponibles(){
+      const set=[...new Set(DIVIDENDOS.map(d=>d.anio))].sort((a,b)=>b-a);
+      return set.length?set:[new Date().getFullYear()];
+    }
+
+    function renderDividendos(){
+      // Selector de año
+      const sel=document.getElementById('cs7-year-sel');
+      const anios=aniosDisponibles();
+      sel.innerHTML=anios.map(a=>`<option value="${a}">${a}</option>`).join('');
+      cs7RenderCalendario();
+      renderGraficosDiv();
+    }
+
+    // Calendario depende del año elegido
+    window.cs7RenderCalendario = function(){
+      const sel=document.getElementById('cs7-year-sel');
+      const anio=parseInt(sel.value)||aniosDisponibles()[0];
+      const delAnio=DIVIDENDOS.filter(d=>d.anio===anio);
+      // Agrupar por empresa × mes
+      const porEmp={};
+      delAnio.forEach(d=>{
+        if(!porEmp[d.ticker]) porEmp[d.ticker]=Array(12).fill(0);
+        porEmp[d.ticker][d.mes-1]+=d.monto;
+      });
+      const empresas=Object.entries(porEmp).map(([emp,meses])=>({emp,meses,total:meses.reduce((a,b)=>a+b,0)}))
+        .sort((a,b)=>b.total-a.total);
+      const body=document.getElementById('cs7-cal-body');
+      const fmtCal=n=>n===0?'—':'$'+Math.round(n).toLocaleString('es-CL');
+      body.innerHTML=empresas.map(d=>{
+        const celdas=d.meses.map(v=>`<td class="${v?'cal-pay':'cal-empty'}">${fmtCal(v)}</td>`).join('');
+        return `<tr><td>${d.emp}</td>${celdas}<td class="col-tot">${fmtCal(d.total)}</td></tr>`;
+      }).join('');
+      // Totales por mes
+      const totMes=Array(12).fill(0);
+      empresas.forEach(d=>d.meses.forEach((v,i)=>totMes[i]+=v));
+      const granTotal=totMes.reduce((a,b)=>a+b,0);
+      document.getElementById('cs7-cal-foot').innerHTML=
+        `<td>Total</td>`+totMes.map(v=>`<td>${fmtCal(v)}</td>`).join('')+`<td class="col-tot">${fmtCal(granTotal)}</td>`;
+      // KPIs de dividendos (del año elegido)
+      renderDivKPIs(anio, delAnio, granTotal);
+    };
+
+    function renderDivKPIs(anio, delAnio, granTotal){
+      const mesesConPago=[...new Set(delAnio.map(d=>d.mes))].length || 1;
+      const promMensual=granTotal/12;
+      // Mayor pago único
+      let mayorPago={monto:0,ticker:'—',mes:0};
+      delAnio.forEach(d=>{ if(d.monto>mayorPago.monto) mayorPago={monto:d.monto,ticker:d.ticker,mes:d.mes}; });
+      // Mayor pagador (suma por empresa)
+      const porEmp={}; delAnio.forEach(d=>porEmp[d.ticker]=(porEmp[d.ticker]||0)+d.monto);
+      let mayorPagador={ticker:'—',monto:0};
+      Object.entries(porEmp).forEach(([t,m])=>{ if(m>mayorPagador.monto) mayorPagador={ticker:t,monto:m}; });
+      const clpR=n=>'$'+Math.round(n).toLocaleString('es-CL');
+      const kpis=[
+        {lbl:`Total acumulado ${anio}`, val:clpR(granTotal), accent:'#2ecc71'},
+        {lbl:'Promedio mensual', val:clpR(promMensual), accent:'#2fd4c4'},
+        {lbl:'Mayor pago único', val:clpR(mayorPago.monto), sub:`${mayorPago.ticker} · ${MESES_CORTO[mayorPago.mes-1]||''}`, accent:'#f5c451'},
+        {lbl:'Mayor pagador', val:mayorPagador.ticker, sub:clpR(mayorPagador.monto)+' total', accent:'#4a8cff'}
+      ];
+      document.getElementById('cs7-div-kpis').innerHTML=kpis.map(k=>`
+        <div class="cs7-kpi" style="--accent:${k.accent}">
+          <div class="lbl">${k.lbl}</div>
+          <div class="val ${k.val.length>9?'sm':''}">${k.val}</div>
+          ${k.sub?`<div class="delta" style="color:var(--txt-dim);font-weight:400">${k.sub}</div>`:''}
+        </div>`).join('');
+    }
+
+    function renderGraficosDiv(){
+      const cssVar=v=>getComputedStyle(document.getElementById('cs7-app')).getPropertyValue(v).trim();
+      const txtDim=cssVar('--txt-dim')||'#8794ad';
+      const grid='rgba(135,148,173,.12)';
+      const fmtK=n=> n>=1000? '$'+Math.round(n/1000)+'k' : '$'+n;
+      Chart.defaults.font.family="'Sora', sans-serif";
+      Chart.defaults.color=txtDim;
+
+      // Totales por empresa (todos los años)
+      const porEmp={}; DIVIDENDOS.forEach(d=>porEmp[d.ticker]=(porEmp[d.ticker]||0)+d.monto);
+      const empOrden=Object.entries(porEmp).map(([t,m])=>({t,m})).sort((a,b)=>b.m-a.m);
+
+      // 1. Máximos pagadores (dona)
+      mkChart('cs7-ch-pagadores',{
+        type:'doughnut',
+        data:{ labels:empOrden.map(e=>e.t), datasets:[{ data:empOrden.map(e=>e.m), backgroundColor:DIVPALETTE, borderWidth:0 }] },
+        options:{ responsive:true, maintainAspectRatio:false, cutout:'60%',
+          plugins:{ legend:{ position:'right', labels:{ boxWidth:10, font:{size:11} } } } }
+      });
+
+      // 2. Desempeño por empresa (barras)
+      mkChart('cs7-ch-desempeno',{
+        type:'bar',
+        data:{ labels:empOrden.map(e=>e.t), datasets:[{ data:empOrden.map(e=>e.m), backgroundColor:'#38e0d0', borderRadius:4 }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+          scales:{ y:{ticks:{callback:fmtK},grid:{color:grid}}, x:{ticks:{font:{size:10}},grid:{display:false}} } }
+      });
+
+      // 3. Comparativa mensual por año (barras agrupadas)
+      const anios=aniosDisponibles().slice().sort((a,b)=>a-b);
+      const dsMensual=anios.map((a,i)=>{
+        const arr=Array(12).fill(0);
+        DIVIDENDOS.filter(d=>d.anio===a).forEach(d=>arr[d.mes-1]+=d.monto);
+        return { label:String(a), data:arr, backgroundColor:DIVPALETTE[i%DIVPALETTE.length], borderRadius:3 };
+      });
+      mkChart('cs7-ch-mensual',{
+        type:'bar',
+        data:{ labels:MESES_CORTO, datasets:dsMensual },
+        options:{ responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{ labels:{ boxWidth:12, font:{size:11} } } },
+          scales:{ y:{ticks:{callback:fmtK},grid:{color:grid}}, x:{ticks:{font:{size:10}},grid:{display:false}} } }
+      });
+
+      // 4. Evolución mensual acumulada (línea) — año más reciente
+      const anioAct=aniosDisponibles()[0];
+      const arrAct=Array(12).fill(0);
+      DIVIDENDOS.filter(d=>d.anio===anioAct).forEach(d=>arrAct[d.mes-1]+=d.monto);
+      let ac=0; const evol=arrAct.map(v=>ac+=v);
+      mkChart('cs7-ch-evol',{
+        type:'line',
+        data:{ labels:MESES_CORTO, datasets:[{ data:evol, borderColor:'#2ecc71', backgroundColor:'rgba(46,204,113,.12)', fill:true, tension:.3, pointRadius:2 }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+          scales:{ y:{ticks:{callback:fmtK},grid:{color:grid}}, x:{ticks:{font:{size:9}},grid:{display:false}} } }
+      });
+
+      // 5. Evolución anual (barras)
+      const totalPorAnio=anios.map(a=>DIVIDENDOS.filter(d=>d.anio===a).reduce((s,d)=>s+d.monto,0));
+      mkChart('cs7-ch-anual',{
+        type:'bar',
+        data:{ labels:anios.map(String), datasets:[{ data:totalPorAnio, backgroundColor:'#f5c451', borderRadius:4, barThickness:50 }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+          scales:{ y:{ticks:{callback:fmtK},grid:{color:grid}}, x:{grid:{display:false}} } }
+      });
+    }
+
+    function mkChart(id, cfg){
+      if(CHARTS[id]) CHARTS[id].destroy();
+      const el=document.getElementById(id);
+      if(el) CHARTS[id]=new Chart(el, cfg);
+    }
 
     // ===== Clock (independiente de los datos) =====
     const tick = ()=>{ const d=new Date(); document.getElementById('cs7-clock').textContent =
