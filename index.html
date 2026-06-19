@@ -22,6 +22,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .cs7nav-tab{padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;color:#9090A8;cursor:pointer;border:1px solid transparent;transition:all .18s ease;text-decoration:none;display:inline-block;}
 .cs7nav-tab:hover{color:#F0F0F8;background:#252535;}
 .cs7nav-tab.active{color:#0F0F14;background:#6C63FF;border-color:#6C63FF;}
+.subtabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+.subtab{padding:8px 14px;border-radius:10px;font-size:12.5px;font-weight:600;color:#9090A8;cursor:pointer;border:1px solid #2A2A38;background:#15151E;transition:all .15s ease;}
+.subtab:hover{color:#F0F0F8;background:#252535;}
+.subtab.active{color:#0F0F14;background:#6C63FF;border-color:#6C63FF;}
 .badge{font-size:11px;font-weight:600;background:#0F3D2A;color:#4ADE80;border-radius:20px;padding:4px 12px;white-space:nowrap;border:1px solid #1A5C3A;}
 .badge.error{background:#3D0F0F;color:#FF6B6B;border-color:#5C1A1A;}
 .badge.loading{background:#1A1A0F;color:#FFD700;border-color:#3A3A00;}
@@ -105,8 +109,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div class="last-update" id="lastUpdate"></div>
 
-<div class="filter-bar">
-  <label>Mes:</label>
+<div class="subtabs">
+  <button class="subtab active" data-tab="mes">📅 Mes calendario</button>
+  <button class="subtab" data-tab="ciclo">🔄 Período de flujo</button>
+  <button class="subtab" data-tab="reportes">📊 Reportes</button>
+</div>
+
+<div class="filter-bar" id="filterBar">
+  <label id="selectorLabel">Mes:</label>
   <select id="mesSelect" disabled><option value="">Cargando...</option></select>
 </div>
 
@@ -155,6 +165,39 @@ function parseMonto(v){
   return parseFloat((v||'0').toString().replace(/\$/g,'').replace(/\./g,'').replace(/,/g,'.').trim())||0;
 }
 
+// Acumulador compartido: procesa una transacción dentro de un período (mes o ciclo)
+function nuevoPeriodo(label,esCiclo){
+  return {label,esCiclo,ingresos:0,ahorro:0,inversion:0,costoFin:0,flujoExtra:0,gastos:{}};
+}
+function acumular(m,cat,sub,monto,tipo){
+  if(tipo==='Ingreso') m.ingresos+=Math.abs(monto);
+  else if(tipo==='Inversión') m.inversion+=Math.abs(monto);
+  else if(tipo==='Ahorro'){
+    if(sub==='Aporte inversiones') m.inversion+=Math.abs(monto);
+    else m.ahorro+=Math.abs(monto);
+  }
+  else if(tipo==='Préstamo'){
+    // Préstamo otorgado: sale plata (resta del flujo). Recibido: entra (suma).
+    if(sub==='Préstamo recibido') m.flujoExtra+=Math.abs(monto);
+    else m.flujoExtra-=Math.abs(monto);
+  }
+  else if(tipo==='Gasto'){
+    if(cat==='Costo Financiero') m.costoFin+=Math.abs(monto);
+    if(!m.gastos[cat]) m.gastos[cat]={};
+    if(!m.gastos[cat][sub]) m.gastos[cat][sub]=0;
+    m.gastos[cat][sub]+=Math.abs(monto);
+  } else if(tipo==='Devolución'){
+    if(cat==='Préstamos'){
+      // Devolución recibida: entra plata. Devolución entregada: sale plata.
+      if(sub==='Devolución entregada') m.flujoExtra-=Math.abs(monto);
+      else m.flujoExtra+=Math.abs(monto);
+    } else if(m.gastos[cat]&&m.gastos[cat][sub]){
+      m.gastos[cat][sub]=Math.max(0,m.gastos[cat][sub]-Math.abs(monto));
+    }
+  }
+}
+
+// Agrupa por MES calendario (columna C "Mes", formato may-26)
 function procesarRegistro(rows){
   const meses={};
   rows.slice(1).forEach(row=>{
@@ -164,33 +207,52 @@ function procesarRegistro(rows){
     const monto=parseMonto(row[6]);
     const tipo=(row[8]||'').trim();
     if(!mes||!cat) return;
-    if(!meses[mes]) meses[mes]={mes,ingresos:0,ahorro:0,inversion:0,costoFin:0,flujoExtra:0,gastos:{}};
-    const m=meses[mes];
-    if(tipo==='Ingreso') m.ingresos+=Math.abs(monto);
-    else if(tipo==='Inversión') m.inversion+=Math.abs(monto);
-    else if(tipo==='Ahorro'){
-      if(sub==='Aporte inversiones') m.inversion+=Math.abs(monto);
-      else m.ahorro+=Math.abs(monto);
-    }
-    else if(tipo==='Gasto'){
-      if(cat==='Costo Financiero') m.costoFin+=Math.abs(monto);
-      if(!m.gastos[cat]) m.gastos[cat]={};
-      if(!m.gastos[cat][sub]) m.gastos[cat][sub]=0;
-      m.gastos[cat][sub]+=Math.abs(monto);
-    } else if(tipo==='Devolución'){
-      if(cat==='Préstamos'){
-        // Devolución de préstamo: flujo disponible, no resta de gastos
-        m.flujoExtra+=Math.abs(monto);
-      } else if(m.gastos[cat]&&m.gastos[cat][sub]){
-        // Devolución de gasto compartido: resta del gasto neto
-        m.gastos[cat][sub]=Math.max(0,m.gastos[cat][sub]-Math.abs(monto));
-      }
-    }
+    if(!meses[mes]){ meses[mes]=nuevoPeriodo(labelMes(mes),false); meses[mes].mes=mes; }
+    acumular(meses[mes],cat,sub,monto,tipo);
   });
   return meses;
 }
 
-let datosMeses={}, mesActual='', donutChart=null, evolChart=null, activeIdx=null;
+// Agrupa por CICLO DE FLUJO (12 al 11), usando la fecha real de la columna A
+const DIA_PAGO=12;
+const MESES_CORTOS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function parseFechaReg(s){
+  if(!s) return null;
+  const p=s.toString().trim().split(/[-\/]/);
+  if(p.length!==3) return null;
+  const d=new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
+  return isNaN(d)?null:d;
+}
+function labelCiclo(y,m){
+  let ym=m+1,yy=y; if(ym>11){ym=0;yy=y+1;}
+  return `12 ${MESES_CORTOS[m]} - 11 ${MESES_CORTOS[ym]} ${yy}`;
+}
+function cicloToMesKey(key){
+  const [y,mm]=key.split('-');
+  return `${MESES_CORTOS[parseInt(mm)-1]}-${y.slice(2)}`;
+}
+function procesarPorCiclo(rows){
+  const ciclos={};
+  rows.slice(1).forEach(row=>{
+    const fecha=parseFechaReg(row[0]);
+    const cat=(row[3]||'').trim();
+    const sub=(row[4]||'').trim();
+    const monto=parseMonto(row[6]);
+    const tipo=(row[8]||'').trim();
+    if(!fecha||!cat) return;
+    let y=fecha.getFullYear(),m=fecha.getMonth();
+    if(fecha.getDate()<DIA_PAGO){ m-=1; if(m<0){m=11;y-=1;} }
+    const key=`${y}-${String(m+1).padStart(2,'0')}`;
+    if(!ciclos[key]){ ciclos[key]=nuevoPeriodo(labelCiclo(y,m),true); ciclos[key].key=key; }
+    acumular(ciclos[key],cat,sub,monto,tipo);
+  });
+  return ciclos;
+}
+function ordenarCiclos(ciclos){
+  return Object.values(ciclos).sort((a,b)=>a.key<b.key?-1:1);
+}
+
+let datosMeses={}, datosCiclos={}, datosActivos={}, modo='mes', mesActual='', donutChart=null, evolChart=null, activeIdx=null;
 
 function ordenarMeses(meses){
   const ord={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
@@ -202,13 +264,18 @@ function ordenarMeses(meses){
 }
 
 function renderTodo(mesKey){
-  const d=datosMeses[mesKey];
+  const d=datosActivos[mesKey];
   if(!d) return;
   const totalG=Object.values(d.gastos).reduce((s,subs)=>s+Object.values(subs).reduce((a,b)=>a+b,0),0);
-  
+  const unidad=d.esCiclo?'del ciclo':'del mes';
+  const tituloPeriodo=d.label||labelMes(mesKey);
+  const flujoLabel=d.flujoExtra>=0
+    ? `Sueldo + movimientos de préstamos (entró ${fmt(Math.abs(d.flujoExtra))})`
+    : `Sueldo − movimientos de préstamos (salió ${fmt(Math.abs(d.flujoExtra))})`;
+
   document.getElementById('mainContent').innerHTML=`
     <div class="metrics">
-      <div class="mc"><p class="mc-lbl">Ingreso</p><p class="mc-val">${d.ingresos?fmtC(d.ingresos):'—'}</p><p class="mc-sub">del mes</p></div>
+      <div class="mc"><p class="mc-lbl">Ingreso</p><p class="mc-val">${d.ingresos?fmtC(d.ingresos):'—'}</p><p class="mc-sub">${unidad}</p></div>
       <div class="mc"><p class="mc-lbl">Gasto total</p><p class="mc-val neg">${fmtC(totalG)}</p><p class="mc-sub">${d.ingresos?Math.round(totalG/d.ingresos*100)+'% ing.':'en curso'}</p></div>
       <div class="mc"><p class="mc-lbl">Ahorro</p><p class="mc-val pos">${d.ahorro?fmtC(d.ahorro):'—'}</p><p class="mc-sub">l\u00edquido</p></div>
       <div class="mc"><p class="mc-lbl">Inversión</p><p class="mc-val" style="color:#6C63FF">${d.inversion?fmtC(d.inversion):'—'}</p><p class="mc-sub">dividendos</p></div>
@@ -216,13 +283,13 @@ function renderTodo(mesKey){
     </div>
     ${d.flujoExtra?`<div style="background:#1A2A24;border:1px solid #1A5C3A;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
       <div>
-        <span style="font-size:12px;color:#9090A8;">Flujo disponible del mes</span>
-        <span style="font-size:11px;color:#7070A0;display:block;">Sueldo + devoluciones de préstamos recibidas</span>
+        <span style="font-size:12px;color:#9090A8;">Flujo disponible ${unidad}</span>
+        <span style="font-size:11px;color:#7070A0;display:block;">${flujoLabel}</span>
       </div>
-      <span style="font-size:18px;font-weight:700;color:#4ADE80;">${fmtC(d.ingresos+d.flujoExtra)}</span>
+      <span style="font-size:18px;font-weight:700;color:#4ADE80;">${fmt(d.ingresos+d.flujoExtra)}</span>
     </div>`:''}
     <div class="card">
-      <p class="card-ttl">Distribución de gastos · ${labelMes(mesKey)}</p>
+      <p class="card-ttl">Distribución de gastos · ${tituloPeriodo}</p>
       <div class="torta-layout">
         <div>
           <div class="torta-wrap">
@@ -253,7 +320,7 @@ function renderTodo(mesKey){
       <div id="prestamoContent"><p style="font-size:11px;color:#7070A0">Cargando...</p></div>
     </div>
     <div class="card" style="margin-bottom:0">
-      <p class="card-ttl">Evolución mensual</p>
+      <p class="card-ttl">Evolución ${d.esCiclo?'por ciclo':'mensual'}</p>
       <div class="evol-filters">
         <label>Desde:</label><select id="evolDesde"></select>
         <label>Hasta:</label><select id="evolHasta"></select>
@@ -269,7 +336,7 @@ function renderTodo(mesKey){
 
   activeIdx=null;
   renderDonut(d);
-  cargarTC(mesKey);
+  cargarTC(d.esCiclo?cicloToMesKey(mesKey):mesKey);
   cargarFondo();
   renderEvol();
 
@@ -394,15 +461,15 @@ function buildLeg2(){
 }
 
 function renderEvol(){
-  const mesesOrdenados=ordenarMeses(datosMeses);
-  const keys=mesesOrdenados.map(m=>m.mes);
-  const labels=keys.map(labelMes);
+  const orden = modo==='ciclo' ? ordenarCiclos(datosActivos) : ordenarMeses(datosActivos);
+  const keys=orden.map(p=>p.esCiclo?p.key:p.mes);
+  const labelsByKey={}; orden.forEach(p=>labelsByKey[p.esCiclo?p.key:p.mes]=p.label);
   const desde=document.getElementById('evolDesde');
   const hasta=document.getElementById('evolHasta');
   if(desde&&!desde.options.length){
     keys.forEach((k,i)=>{
-      const o1=new Option(labelMes(k),i); desde.add(o1);
-      const o2=new Option(labelMes(k),i); hasta.add(o2);
+      const o1=new Option(labelsByKey[k],i); desde.add(o1);
+      const o2=new Option(labelsByKey[k],i); hasta.add(o2);
     });
     desde.value=0;
     hasta.value=keys.length-1;
@@ -410,17 +477,17 @@ function renderEvol(){
   const d=parseInt(desde?.value||0), h=parseInt(hasta?.value||(keys.length-1));
   const sliceKeys=keys.slice(d,h+1);
   const regular=sliceKeys.map(k=>{
-    const m=datosMeses[k];
+    const m=datosActivos[k];
     return Object.entries(m.gastos).filter(([c])=>c!=='Extraordinarios'&&c!=='Costo Financiero')
       .reduce((s,[,subs])=>s+Object.values(subs).reduce((a,b)=>a+b,0),0);
   });
-  const extra=sliceKeys.map(k=>Object.values(datosMeses[k].gastos['Extraordinarios']||{}).reduce((a,b)=>a+b,0));
-  const ahorro=sliceKeys.map(k=>datosMeses[k].ahorro);
-  const inversion=sliceKeys.map(k=>datosMeses[k].inversion||0);
+  const extra=sliceKeys.map(k=>Object.values(datosActivos[k].gastos['Extraordinarios']||{}).reduce((a,b)=>a+b,0));
+  const ahorro=sliceKeys.map(k=>datosActivos[k].ahorro);
+  const inversion=sliceKeys.map(k=>datosActivos[k].inversion||0);
   if(evolChart) evolChart.destroy();
   evolChart=new Chart(document.getElementById('evolucion'),{
     type:'bar',
-    data:{labels:sliceKeys.map(labelMes),datasets:[
+    data:{labels:sliceKeys.map(k=>labelsByKey[k]),datasets:[
       {label:'Regulares',data:regular,backgroundColor:'#378ADD',borderRadius:3},
       {label:'Extraordinarios',data:extra,backgroundColor:'#E24B4A',borderRadius:3},
       {label:'Ahorro',data:ahorro,backgroundColor:'#1D9E75',borderRadius:3},
@@ -513,6 +580,62 @@ async function cargarFondo(){
   }
 }
 
+function keyDe(p){ return p.esCiclo ? p.key : p.mes; }
+
+function cambiarTab(tab){
+  modo=tab;
+  document.querySelectorAll('.subtab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  const fb=document.getElementById('filterBar');
+  if(tab==='reportes'){
+    fb.style.display='none';
+    cargarReportes();
+    return;
+  }
+  fb.style.display='';
+  datosActivos = (tab==='ciclo') ? datosCiclos : datosMeses;
+  const orden = (tab==='ciclo') ? ordenarCiclos(datosCiclos) : ordenarMeses(datosMeses);
+  document.getElementById('selectorLabel').textContent=(tab==='ciclo')?'Período:':'Mes:';
+  const sel=document.getElementById('mesSelect');
+  sel.innerHTML=orden.map(p=>`<option value="${keyDe(p)}">${p.label}</option>`).join('');
+  const last=orden[orden.length-1];
+  const k=keyDe(last);
+  sel.value=k;
+  renderTodo(k);
+  renderDonut2(datosActivos[k]);
+}
+
+async function cargarReportes(){
+  const c=document.getElementById('mainContent');
+  c.innerHTML='<div class="loading-overlay"><div class="spinner"></div>Leyendo histórico de ciclos...</div>';
+  try{
+    const rows=await fetchSheet("'Histórico Ciclos'!A1:R500");
+    if(!rows||rows.length<2){
+      c.innerHTML='<div class="card"><p class="card-ttl">Sin reportes guardados aún</p><p style="font-size:13px;color:#9090A8">El histórico se llena solo cuando el reporte mensual corre el día 13. Cuando haya ciclos guardados, aparecerán acá.</p></div>';
+      return;
+    }
+    const cards=rows.slice(1).reverse().map(r=>{
+      const ciclo=r[0]||'';
+      const ingresos=parseMonto(r[2]), gastos=parseMonto(r[3]), ahorro=parseMonto(r[4]);
+      const inv=parseMonto(r[5]), balance=parseMonto(r[7]), tasa=(r[8]||'').toString();
+      const colBal=balance>=0?'#4ADE80':'#FF6B6B';
+      return `<div class="card">
+        <p class="card-ttl">${ciclo}</p>
+        <div class="metrics" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+          <div class="mc"><p class="mc-lbl">Ingresos</p><p class="mc-val">${fmtC(ingresos)}</p></div>
+          <div class="mc"><p class="mc-lbl">Gastos</p><p class="mc-val neg">${fmtC(gastos)}</p></div>
+          <div class="mc"><p class="mc-lbl">Balance</p><p class="mc-val" style="color:${colBal}">${fmtC(balance)}</p></div>
+          <div class="mc"><p class="mc-lbl">Ahorro</p><p class="mc-val pos">${fmtC(ahorro)}</p></div>
+          <div class="mc"><p class="mc-lbl">Inversión</p><p class="mc-val" style="color:#6C63FF">${fmtC(inv)}</p></div>
+          <div class="mc"><p class="mc-lbl">Tasa ahorro</p><p class="mc-val">${tasa||'—'}</p></div>
+        </div>
+      </div>`;
+    }).join('');
+    c.innerHTML=`<p style="font-size:12px;color:#7070A0;margin-bottom:12px">Archivo de cada ciclo de sueldo (desde la hoja Histórico Ciclos)</p>${cards}`;
+  }catch(e){
+    c.innerHTML=`<div class="card"><p class="card-ttl">No se pudo leer el histórico</p><p style="font-size:13px;color:#9090A8">${e.message}</p><p style="font-size:11px;color:#7070A0;margin-top:8px">Verifica que exista la hoja "Histórico Ciclos" en la planilla.</p></div>`;
+  }
+}
+
 async function init(){
   const badge=document.getElementById('connBadge');
   try{
@@ -526,23 +649,27 @@ async function init(){
     badge.className='badge loading';
     const rows=await fetchSheet('Registro!A:K');
     datosMeses=procesarRegistro(rows);
+    datosCiclos=procesarPorCiclo(rows);
+    datosActivos=datosMeses;
+    modo='mes';
     const mesesOrdenados=ordenarMeses(datosMeses);
     const select=document.getElementById('mesSelect');
-    select.innerHTML=mesesOrdenados.map(m=>`<option value="${m.mes}">${labelMes(m.mes)}</option>`).join('');
+    select.innerHTML=mesesOrdenados.map(m=>`<option value="${m.mes}">${m.label}</option>`).join('');
     select.disabled=false;
     mesActual=mesesOrdenados[mesesOrdenados.length-1].mes;
     select.value=mesActual;
     renderTodo(mesActual);
-    renderDonut2(datosMeses[mesActual]);
+    renderDonut2(datosActivos[mesActual]);
     const ts=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
     badge.textContent='✓ Actualizado '+ts;
     badge.className='badge';
     document.getElementById('lastUpdate').textContent='Última actualización: '+new Date().toLocaleDateString('es-CL')+' '+ts;
     select.addEventListener('change',e=>{
-      mesActual=e.target.value;
-      renderTodo(mesActual);
-      renderDonut2(datosMeses[mesActual]);
+      const k=e.target.value;
+      renderTodo(k);
+      renderDonut2(datosActivos[k]);
     });
+    document.querySelectorAll('.subtab').forEach(b=>b.addEventListener('click',()=>cambiarTab(b.dataset.tab)));
   }catch(err){
     badge.textContent='❌ Error';
     badge.className='badge error';
