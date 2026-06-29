@@ -366,6 +366,11 @@ function computeCoach(d, prevD){
     if(pctCF >= 5) chips.push({ cls:'chip-red', text:`TC ${pctCF}% ing.` });
   }
 
+  // Sin devolución papá registrada
+  if(d.flujoExtra >= 0 && d.flujoExtra < 100000){
+    chips.push({ cls:'chip-amber', text:'Sin devolución registrada' });
+  }
+
   // Tendencia vs período anterior
   if(prevD && totalG > 0){
     const prevG = Object.values(prevD.gastos).reduce((s,subs) => s + Object.values(subs).reduce((a,b)=>a+b,0), 0);
@@ -414,6 +419,7 @@ function renderTodo(mesKey){
     : d.flujoExtra < 0
     ? `Sueldo − ${fmt(Math.abs(d.flujoExtra))} préstamo dado`
     : 'Solo sueldo · sin flujo extra';
+  window._balanceLibre = balanceLibre;
 
   // Período anterior para tendencia del coach
   const allKeys = (modo==='ciclo' ? ordenarCiclos(datosCiclos) : ordenarMeses(datosMeses)).map(p => p.esCiclo ? p.key : p.mes);
@@ -442,6 +448,12 @@ function renderTodo(mesKey){
         <div class="flujo-sub">Después de gastos e inversión</div>
       </div>
       <span class="flujo-val" style="color:${balColor}">${balFmt}</span>
+      <div style="width:100%;border-top:1px solid rgba(52,211,153,.15);margin:2px 0"></div>
+      <div>
+        <div class="flujo-lbl" id="tcMarginLbl" style="color:var(--txt-3)">Margen post-TC</div>
+        <div class="flujo-sub" id="tcMarginSub">Calculando cuota...</div>
+      </div>
+      <span id="tcMarginVal" class="flujo-val" style="color:var(--txt-3)">—</span>
     </div>
     <div class="coach">
       <div class="coach-left">
@@ -470,7 +482,6 @@ function renderTodo(mesKey){
       <div class="card" style="margin-bottom:0"><p class="card-ttl">Tarjeta de crédito</p><div id="tcRows"><p style="font-size:11px;color:var(--txt-3)">Cargando...</p></div></div>
       <div class="card" style="margin-bottom:0"><p class="card-ttl">Fondo de ahorro</p><div id="fondoContent"><p style="font-size:11px;color:var(--txt-3)">Cargando...</p></div></div>
     </div>
-    <div class="card"><p class="card-ttl">Préstamo · papá</p><div id="prestamoContent"><p style="font-size:11px;color:var(--txt-3)">Cargando...</p></div></div>
     <div class="card" style="margin-bottom:0">
       <p class="card-ttl">Evolución ${d.esCiclo?'por ciclo':'mensual'}</p>
       <div class="evol-filters">
@@ -604,6 +615,22 @@ async function cargarTC(mesKey){
     }
     const el = document.getElementById('tcRows');
     if(el) el.innerHTML = html;
+    // Actualizar margen post-TC en el banner
+    const cuotaActual = parseMonto(filaPagar[idxMes+6]||'0');
+    if(cuotaActual > 0 && window._balanceLibre !== undefined){
+      const margen = window._balanceLibre - cuotaActual;
+      const mEl  = document.getElementById('tcMarginVal');
+      const mLbl = document.getElementById('tcMarginLbl');
+      const mSub = document.getElementById('tcMarginSub');
+      if(mEl && mLbl && mSub){
+        const color  = margen < 0 ? 'var(--red)' : margen < cuotaActual * 0.25 ? 'var(--amber)' : 'var(--green)';
+        const estado = margen < 0 ? 'No cubre la cuota TC' : margen < cuotaActual * 0.25 ? 'Margen ajustado' : 'OK · cubre TC';
+        mEl.textContent  = (margen < 0 ? '−' : '') + fmtC(Math.abs(margen));
+        mEl.style.color  = color;
+        mLbl.style.color = color;
+        mSub.textContent = `Cuota ${fmt(cuotaActual)} · ${estado}`;
+      }
+    }
   }catch(e){
     const el = document.getElementById('tcRows');
     if(el) el.innerHTML = `<p style="font-size:11px;color:var(--red)">${e.message}</p>`;
@@ -635,14 +662,6 @@ async function cargarFondo(){
       <div class="prg-bar"><div class="prg-fill" style="width:${pct}%;background:var(--green)"></div></div>
       <div style="font-size:10px;color:var(--green);margin-bottom:6px">${pct>=100?'Completo · excedente '+fmt(saldo-meta):pct+'% completado'}</div>
       <div class="fondo-row"><span>Aporte mensual</span><span class="fondo-val pos">+${fmt(aporteMensual)}</span></div>`;
-    const elP  = document.getElementById('prestamoContent');
-    if(elP) elP.innerHTML=`
-      <div class="fondo-row"><span>Pendiente</span><span class="fondo-val" style="color:var(--amber)">${fmt(prestamo)}</span></div>
-      ${prestamoTotal?`<div class="fondo-row"><span>Total prestado</span><span>${fmt(prestamoTotal)}</span></div>
-      <div class="prg-bar"><div class="prg-fill" style="width:${pctP}%;background:var(--amber)"></div></div>
-      <div style="font-size:10px;color:var(--amber);margin-bottom:6px">${pctP}% devuelto</div>`:''}
-      ${ultimaFechaDev?`<div class="fondo-row"><span>Última devolución</span><span class="fondo-val pos">+${fmt(ultimoMontoDev)}</span></div>
-      <div style="font-size:10px;color:var(--txt-3)">${ultimaFechaDev}</div>`:''}`;
   }catch(e){
     const el = document.getElementById('fondoContent');
     if(el) el.innerHTML=`<p style="font-size:11px;color:var(--red)">${e.message}</p>`;
